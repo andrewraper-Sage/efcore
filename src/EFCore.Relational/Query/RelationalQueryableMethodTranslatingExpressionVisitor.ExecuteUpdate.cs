@@ -450,7 +450,7 @@ public partial class RelationalQueryableMethodTranslatingExpressionVisitor
                     // one that refers to the mutable table.
 
                     // Get the column on the (mutable) table which corresponds to the property being set
-                    IColumn? targetColumnModel;
+                    IColumn? targetColumnModel = null;
 
                     switch (targetProperty)
                     {
@@ -470,9 +470,12 @@ public partial class RelationalQueryableMethodTranslatingExpressionVisitor
                             // Note that we assume exactly one column with the given name mapped to the entity (despite entity splitting).
                             // See #36647 and #36646 about improving this.
                             var containerColumnName = complexType.GetContainerColumnName();
-                            targetColumnModel = complexType.ContainingEntityType.GetTableMappings()
-                                .SelectMany(m => m.Table.Columns)
-                                .SingleOrDefault(c => c.Name == containerColumnName);
+                            if (containerColumnName != null)
+                            {
+                                targetColumnModel = complexType.ContainingEntityType.GetTableMappings()
+                                    .Select(m => m.Table.FindColumn(containerColumnName))
+                                    .SingleOrDefault(c => c is not null);
+                            }
                             break;
                         }
 

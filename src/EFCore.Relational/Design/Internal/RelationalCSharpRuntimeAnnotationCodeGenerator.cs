@@ -369,6 +369,8 @@ public class RelationalCSharpRuntimeAnnotationCodeGenerator : CSharpRuntimeAnnot
             Create(column, tableParameters);
         }
 
+        CreateJsonElements(table, tableParameters);
+
         CreateAnnotations(
             table,
             Generate,
@@ -405,6 +407,8 @@ public class RelationalCSharpRuntimeAnnotationCodeGenerator : CSharpRuntimeAnnot
         {
             Create(column, tableParameters);
         }
+
+        CreateJsonElements(table, tableParameters);
 
         CreateAnnotations(
             table,
@@ -449,6 +453,8 @@ public class RelationalCSharpRuntimeAnnotationCodeGenerator : CSharpRuntimeAnnot
             Create(column, viewParameters);
         }
 
+        CreateJsonElements(view, viewParameters);
+
         CreateAnnotations(
             view,
             Generate,
@@ -468,6 +474,135 @@ public class RelationalCSharpRuntimeAnnotationCodeGenerator : CSharpRuntimeAnnot
     /// <param name="parameters">Additional parameters used during code generation.</param>
     public virtual void Generate(IView view, CSharpRuntimeAnnotationCodeGeneratorParameters parameters)
         => GenerateSimpleAnnotations(parameters);
+
+    private void CreateJsonElements(
+        ITableBase table,
+        CSharpRuntimeAnnotationCodeGeneratorParameters parameters)
+    {
+        foreach (var column in table.Columns)
+        {
+            if (column.JsonElement == null)
+            {
+                continue;
+            }
+
+            var code = Dependencies.CSharpHelper;
+            var mainBuilder = parameters.MainBuilder;
+            AddNamespace(typeof(RelationalJsonObject), parameters.Namespaces);
+            AddNamespace(typeof(JsonValueType), parameters.Namespaces);
+
+            var columnVariable = parameters.ScopeVariables.TryGetValue(column, out var cv)
+                ? cv
+                : $"{parameters.TargetName}.FindColumn({code.Literal(column.Name)})!";
+            var elementVariable = CreateJsonElement(column.JsonElement, columnVariable, parameters);
+
+            mainBuilder.AppendLine($"{columnVariable}.JsonElement = {elementVariable};");
+        }
+    }
+
+    private string CreateJsonElement(
+        IRelationalJsonElement element,
+        string columnVariable,
+        CSharpRuntimeAnnotationCodeGeneratorParameters parameters)
+    {
+        var parentLiteral = element.ParentElement != null && parameters.ScopeVariables.TryGetValue(element.ParentElement, out var pv)
+            ? pv
+            : "null";
+
+        return element switch
+        {
+            IRelationalJsonObject jsonObject => CreateJsonObject(jsonObject, columnVariable, parentLiteral, parameters),
+            IRelationalJsonArray jsonArray => CreateJsonArray(jsonArray, columnVariable, parentLiteral, parameters),
+            IRelationalJsonScalar jsonProperty => CreateJsonProperty(jsonProperty, columnVariable, parentLiteral, parameters),
+            _ => throw new UnreachableException()
+        };
+    }
+
+    private string CreateJsonObject(
+        IRelationalJsonObject jsonObject,
+        string columnVariable,
+        string parentLiteral,
+        CSharpRuntimeAnnotationCodeGeneratorParameters parameters)
+    {
+        var code = Dependencies.CSharpHelper;
+        var mainBuilder = parameters.MainBuilder;
+        var variable = code.Identifier((jsonObject.PropertyName ?? "element") + "JsonObject", jsonObject, parameters.ScopeObjects, capitalize: false);
+
+        mainBuilder.Append($"var {variable} = new RelationalJsonObject(");
+        AppendJsonConstructorArgs(jsonObject, columnVariable, parentLiteral, mainBuilder, code);
+        mainBuilder.AppendLine(");");
+
+        foreach (var child in jsonObject.Properties)
+        {
+            var childVariable = CreateJsonElement(child, columnVariable, parameters with { ScopeVariables = new Dictionary<object, string>(parameters.ScopeVariables) { [jsonObject] = variable } });
+            mainBuilder.AppendLine($"{variable}.AddProperty({childVariable});");
+        }
+
+        return variable;
+    }
+
+    private string CreateJsonArray(
+        IRelationalJsonArray jsonArray,
+        string columnVariable,
+        string parentLiteral,
+        CSharpRuntimeAnnotationCodeGeneratorParameters parameters)
+    {
+        var code = Dependencies.CSharpHelper;
+        var mainBuilder = parameters.MainBuilder;
+
+        var variable = code.Identifier((jsonArray.PropertyName ?? "array") + "JsonArray", jsonArray, parameters.ScopeObjects, capitalize: false);
+
+        mainBuilder.Append($"var {variable} = new RelationalJsonArray(");
+        AppendJsonConstructorArgs(jsonArray, columnVariable, parentLiteral, mainBuilder, code);
+        mainBuilder.AppendLine(");");
+
+        var elementTypeVariable = CreateJsonElement(jsonArray.ElementType, columnVariable,
+            parameters with { ScopeVariables = new Dictionary<object, string>(parameters.ScopeVariables) { [jsonArray] = variable } });
+        mainBuilder.AppendLine($"{variable}.ElementType = {elementTypeVariable};");
+
+        return variable;
+    }
+
+    private string CreateJsonProperty(
+        IRelationalJsonScalar jsonProperty,
+        string columnVariable,
+        string parentLiteral,
+        CSharpRuntimeAnnotationCodeGeneratorParameters parameters)
+    {
+        var code = Dependencies.CSharpHelper;
+        var mainBuilder = parameters.MainBuilder;
+        var variable = code.Identifier((jsonProperty.PropertyName ?? "scalar") + "JsonScalar", jsonProperty, parameters.ScopeObjects, capitalize: false);
+
+        mainBuilder.Append($"var {variable} = new RelationalJsonScalar(");
+        AppendJsonConstructorArgs(jsonProperty, columnVariable, parentLiteral, mainBuilder, code);
+        mainBuilder.Append($", JsonValueType.{jsonProperty.ValueType})").AppendLine(";");
+
+        return variable;
+    }
+
+    private static void AppendJsonConstructorArgs(
+        IRelationalJsonElement element,
+        string columnVariable,
+        string parentLiteral,
+        IndentedStringBuilder builder,
+        ICSharpHelper code)
+    {
+        if (element.ParentElement is IRelationalJsonArray)
+        {
+            // (parent, isNullable) — array type
+            builder.Append($"{parentLiteral}, {code.Literal(element.IsNullable)}");
+        }
+        else if (element.ParentElement is IRelationalJsonObject)
+        {
+            // (name, parent, isNullable) — object property
+            builder.Append($"{code.Literal(element.PropertyName!)}, {parentLiteral}, {code.Literal(element.IsNullable)}");
+        }
+        else
+        {
+            // (column, isNullable) — root element
+            builder.Append($"{columnVariable}, {code.Literal(element.IsNullable)}");
+        }
+    }
 
     private string GetOrCreate(
         ISqlQuery sqlQuery,
@@ -2078,6 +2213,7 @@ public class RelationalCSharpRuntimeAnnotationCodeGenerator : CSharpRuntimeAnnot
             annotations.Remove(RelationalAnnotationNames.UpdateStoredProcedureParameterMappings);
             annotations.Remove(RelationalAnnotationNames.UpdateStoredProcedureResultColumnMappings);
             annotations.Remove(RelationalAnnotationNames.DefaultColumnMappings);
+            annotations.Remove(RelationalAnnotationNames.JsonElementMappings);
         }
         else
         {
@@ -2108,6 +2244,40 @@ public class RelationalCSharpRuntimeAnnotationCodeGenerator : CSharpRuntimeAnnot
         }
 
         base.Generate(property, parameters);
+    }
+
+    /// <inheritdoc />
+    public override void Generate(INavigation navigation, CSharpRuntimeAnnotationCodeGeneratorParameters parameters)
+    {
+        if (parameters.IsRuntime)
+        {
+            var annotations = parameters.Annotations;
+            annotations.Remove(RelationalAnnotationNames.TableColumnMappings);
+            annotations.Remove(RelationalAnnotationNames.ViewColumnMappings);
+            annotations.Remove(RelationalAnnotationNames.SqlQueryColumnMappings);
+            annotations.Remove(RelationalAnnotationNames.FunctionColumnMappings);
+            annotations.Remove(RelationalAnnotationNames.DefaultColumnMappings);
+            annotations.Remove(RelationalAnnotationNames.JsonElementMappings);
+        }
+
+        base.Generate(navigation, parameters);
+    }
+
+    /// <inheritdoc />
+    public override void Generate(IComplexProperty complexProperty, CSharpRuntimeAnnotationCodeGeneratorParameters parameters)
+    {
+        if (parameters.IsRuntime)
+        {
+            var annotations = parameters.Annotations;
+            annotations.Remove(RelationalAnnotationNames.TableColumnMappings);
+            annotations.Remove(RelationalAnnotationNames.ViewColumnMappings);
+            annotations.Remove(RelationalAnnotationNames.SqlQueryColumnMappings);
+            annotations.Remove(RelationalAnnotationNames.FunctionColumnMappings);
+            annotations.Remove(RelationalAnnotationNames.DefaultColumnMappings);
+            annotations.Remove(RelationalAnnotationNames.JsonElementMappings);
+        }
+
+        base.Generate(complexProperty, parameters);
     }
 
     private void Create(
