@@ -3018,6 +3018,24 @@ public sealed partial class SelectExpression : TableExpressionBase
         if (innerNullable)
         {
             innerShaper = new EntityShaperNullableMarkingExpressionVisitor().Visit(innerShaper);
+
+            // For non-entity reference type projections (NewExpression, MemberInitExpression) on the nullable
+            // side of a left join / outer apply, wrap with a conditional null check. Without this, the shaper
+            // would try to assign null values to non-nullable value-type members (e.g. int), throwing
+            // "Nullable object must have a value" at runtime. The sentinel is a nullable value-type
+            // ProjectionBindingExpression: when it is null, the entire projection returns null.
+            if (innerShaper is (NewExpression or MemberInitExpression) and { Type.IsValueType: false })
+            {
+                var finder = new NullableValueTypeProjectionBindingFinder();
+                finder.Visit(innerShaper);
+                if (finder.Result != null)
+                {
+                    innerShaper = Expression.Condition(
+                        Expression.Equal(finder.Result, Expression.Default(finder.Result.Type)),
+                        Expression.Default(innerShaper.Type),
+                        innerShaper);
+                }
+            }
         }
 
         return New(
