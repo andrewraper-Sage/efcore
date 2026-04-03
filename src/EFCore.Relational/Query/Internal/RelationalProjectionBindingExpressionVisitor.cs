@@ -567,7 +567,38 @@ public class RelationalProjectionBindingExpressionVisitor : ExpressionVisitor
             }
         }
 
-        return memberInitExpression.Update((NewExpression)newExpression, newBindings);
+        Expression result = memberInitExpression.Update((NewExpression)newExpression, newBindings);
+
+        // When the MemberInitExpression is a reference type and any binding converts from a nullable value type
+        // (e.g. int? → int via .Value), the conversion will throw at runtime if the value is null.
+        // This happens when a left join produces NULL values for the inner side.
+        // Wrap the entire expression with a null check using a nullable value-type binding as sentinel.
+        if (!result.Type.IsValueType)
+        {
+            Expression? sentinelExpression = null;
+            foreach (var binding in newBindings)
+            {
+                if (binding is MemberAssignment
+                    {
+                        Expression: UnaryExpression { NodeType: ExpressionType.Convert, Operand: var operand }
+                    }
+                    && Nullable.GetUnderlyingType(operand.Type) != null)
+                {
+                    sentinelExpression = operand;
+                    break;
+                }
+            }
+
+            if (sentinelExpression != null)
+            {
+                result = Expression.Condition(
+                    Expression.Equal(sentinelExpression, Expression.Default(sentinelExpression.Type)),
+                    Expression.Default(result.Type),
+                    result);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

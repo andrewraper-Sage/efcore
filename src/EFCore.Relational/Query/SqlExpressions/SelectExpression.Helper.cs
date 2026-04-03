@@ -16,33 +16,6 @@ public sealed partial class SelectExpression
                 : base.VisitExtension(extensionExpression);
     }
 
-    private sealed class NullableValueTypeProjectionBindingFinder : ExpressionVisitor
-    {
-        public ProjectionBindingExpression? Result { get; private set; }
-
-        [return: NotNullIfNotNull(nameof(node))]
-        public override Expression? Visit(Expression? node)
-        {
-            if (Result != null)
-            {
-                return node;
-            }
-
-            return base.Visit(node);
-        }
-
-        protected override Expression VisitExtension(Expression extensionExpression)
-        {
-            if (extensionExpression is ProjectionBindingExpression pbe
-                && Nullable.GetUnderlyingType(pbe.Type) != null)
-            {
-                Result = pbe;
-            }
-
-            return extensionExpression;
-        }
-    }
-
     private sealed class SelectExpressionCorrelationFindingExpressionVisitor(SelectExpression outerSelectExpression) : ExpressionVisitor
     {
         private bool _containsOuterReference;
