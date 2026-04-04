@@ -595,6 +595,41 @@ public partial class RelationalShapedQueryCompilingExpressionVisitor
         ///     any release. You should only use it directly in your code with extreme caution and knowing that
         ///     doing so can result in application failures when updating to a new Entity Framework Core release.
         /// </summary>
+        protected override Expression VisitMemberInit(MemberInitExpression memberInitExpression)
+        {
+            var result = base.VisitMemberInit(memberInitExpression);
+
+            // When a left/right join produces NULL values for the inner side, a non-entity MemberInitExpression
+            // with non-nullable value type bindings (e.g. int) will crash at runtime because the underlying
+            // projection value is null and the Convert to a non-nullable type calls .Value on a null Nullable<T>.
+            // Wrap the entire MemberInit with a null check using a nullable value-type binding as sentinel.
+            if (result is MemberInitExpression visited && !visited.Type.IsValueType)
+            {
+                foreach (var binding in visited.Bindings)
+                {
+                    if (binding is MemberAssignment
+                        {
+                            Expression: UnaryExpression { NodeType: ExpressionType.Convert, Operand: var operand }
+                        }
+                        && Nullable.GetUnderlyingType(operand.Type) != null)
+                    {
+                        return Condition(
+                            Equal(operand, Default(operand.Type)),
+                            Default(visited.Type),
+                            visited);
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+        ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+        ///     any release. You should only use it directly in your code with extreme caution and knowing that
+        ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+        /// </summary>
         protected override Expression VisitExtension(Expression extensionExpression)
         {
             switch (extensionExpression)
