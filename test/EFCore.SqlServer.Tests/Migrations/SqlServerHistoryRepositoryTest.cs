@@ -25,6 +25,22 @@ CREATE TABLE [__EFMigrationsHistory] (
     }
 
     [ConditionalFact]
+    public void GetCreateScript_works_with_full_text_catalog()
+    {
+        var sql = CreateHistoryRepository(configureModel: b => b.HasFullTextCatalog("MyCatalog")).GetCreateScript();
+
+        Assert.Equal(
+            """
+CREATE TABLE [__EFMigrationsHistory] (
+    [MigrationId] nvarchar(150) NOT NULL,
+    [ProductVersion] nvarchar(32) NOT NULL,
+    CONSTRAINT [PK___EFMigrationsHistory] PRIMARY KEY ([MigrationId])
+);
+
+""", sql, ignoreLineEndingDifferences: true);
+    }
+
+    [ConditionalFact]
     public void GetCreateScript_works_with_schema()
     {
         var sql = CreateHistoryRepository("my").GetCreateScript();
@@ -149,17 +165,18 @@ END;
 """, sql, ignoreLineEndingDifferences: true);
     }
 
-    private static IHistoryRepository CreateHistoryRepository(string schema = null)
+    private static IHistoryRepository CreateHistoryRepository(string schema = null, Action<ModelBuilder> configureModel = null)
         => new TestDbContext(
                 new DbContextOptionsBuilder()
                     .UseInternalServiceProvider(SqlServerTestHelpers.Instance.CreateServiceProvider())
                     .UseSqlServer(
                         new SqlConnection("Database=DummyDatabase"),
                         b => b.MigrationsHistoryTable(HistoryRepository.DefaultTableName, schema))
-                    .Options)
+                    .Options,
+                configureModel)
             .GetService<IHistoryRepository>();
 
-    private class TestDbContext(DbContextOptions options) : DbContext(options)
+    private class TestDbContext(DbContextOptions options, Action<ModelBuilder> configureModel = null) : DbContext(options)
     {
         public DbSet<Blog> Blogs { get; set; }
 
@@ -169,6 +186,7 @@ END;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            configureModel?.Invoke(modelBuilder);
         }
     }
 
