@@ -92,7 +92,7 @@ public abstract class HistoryRepository : IHistoryRepository
     ///     doing so can result in application failures when updating to a new Entity Framework Core release.
     /// </summary>
     [EntityFrameworkInternal]
-    protected IModel EnsureModel()
+    protected virtual IModel EnsureModel()
     {
         if (_model == null)
         {
