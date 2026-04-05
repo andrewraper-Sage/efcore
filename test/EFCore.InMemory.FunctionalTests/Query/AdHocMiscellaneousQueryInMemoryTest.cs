@@ -20,6 +20,4 @@ public class AdHocMiscellaneousQueryInMemoryTest(NonSharedFixture fixture) : AdH
     public override Task Variable_from_closure_is_parametrized()
         => Task.CompletedTask;
 
-    public override Task Left_join_with_projected_nominal_type_should_be_null_when_no_match()
-        => Task.CompletedTask;
 }

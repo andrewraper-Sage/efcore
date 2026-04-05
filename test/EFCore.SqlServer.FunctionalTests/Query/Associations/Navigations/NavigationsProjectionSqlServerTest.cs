@@ -431,6 +431,18 @@ OUTER APPLY (
 
     #endregion Subquery
 
+    public override async Task LeftJoin_with_projected_nominal_type(bool async)
+    {
+        await base.LeftJoin_with_projected_nominal_type(async);
+
+        AssertSql(
+            """
+SELECT [r].[Id], [r].[Name], [a].[Id], [a].[Int], [a].[Name]
+FROM [RootEntity] AS [r]
+LEFT JOIN [AssociateType] AS [a] ON [r].[OptionalAssociateId] = [a].[Id]
+""");
+    }
+
     [ConditionalFact]
     public virtual void Check_all_tests_overridden()
         => TestHelpers.AssertAllMethodsOverridden(GetType());
