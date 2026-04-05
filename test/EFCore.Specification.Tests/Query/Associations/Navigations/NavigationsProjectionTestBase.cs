@@ -7,11 +7,9 @@ public abstract class NavigationsProjectionTestBase<TFixture>(TFixture fixture)
     : AssociationsProjectionTestBase<TFixture>(fixture)
     where TFixture : NavigationsFixtureBase, new()
 {
-    [ConditionalTheory]
-    [MemberData(nameof(IsAsyncData))]
-    public virtual Task LeftJoin_with_projected_nominal_type(bool async)
+    [ConditionalFact]
+    public virtual Task LeftJoin_with_projected_nominal_type()
         => AssertQuery(
-            async,
             ss => ss.Set<RootEntity>()
                 .LeftJoin(
                     ss.Set<AssociateType>().Select(a => new AssociateProjection { Id = a.Id, Int = a.Int, Name = a.Name }),

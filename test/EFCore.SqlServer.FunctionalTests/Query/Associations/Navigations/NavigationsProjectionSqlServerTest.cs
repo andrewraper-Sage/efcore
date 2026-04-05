@@ -431,9 +431,9 @@ OUTER APPLY (
 
     #endregion Subquery
 
-    public override async Task LeftJoin_with_projected_nominal_type(bool async)
+    public override async Task LeftJoin_with_projected_nominal_type()
     {
-        await base.LeftJoin_with_projected_nominal_type(async);
+        await base.LeftJoin_with_projected_nominal_type();
 
         AssertSql(
             """
