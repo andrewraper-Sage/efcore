@@ -780,7 +780,6 @@ public class RelationalModel : Annotatable, IRelationalModel
         foreach (var property in structuralType.GetDeclaredProperties())
         {
             var propertyJsonName = property.GetJsonPropertyName() ?? property.Name;
-            var propertyTypeMapping = (RelationalTypeMapping)property.GetTypeMapping();
             if (property.IsPrimitiveCollection)
             {
                 var jsonArray = jsonObject.FindProperty(propertyJsonName) as RelationalJsonArray;
@@ -798,10 +797,9 @@ public class RelationalModel : Annotatable, IRelationalModel
                 var jsonProperty = jsonObject.FindProperty(propertyJsonName) as RelationalJsonScalar;
                 if (jsonProperty == null)
                 {
-                    var valueType = GetJsonValueType(propertyTypeMapping);
                     jsonProperty = new RelationalJsonScalar(
                         propertyJsonName, jsonObject,
-                        property.IsNullable, valueType);
+                        property.IsNullable);
                     jsonObject.AddProperty(jsonProperty);
                 }
 
@@ -933,38 +931,7 @@ public class RelationalModel : Annotatable, IRelationalModel
             ?? (RelationalTypeMapping?)property.GetTypeMapping().ElementTypeMapping;
         Check.DebugAssert(elementTypeMapping != null, $"Missing element type mapping for primitive collection '{property.DeclaringType.DisplayName()}.{property.Name}'.");
 
-        var scalarValueType = GetJsonValueType(elementTypeMapping!);
-
-        return new RelationalJsonScalar(parentElement, property.IsNullable, scalarValueType);
-    }
-
-    private static JsonValueType GetJsonValueType(RelationalTypeMapping typeMapping)
-    {
-        var underlyingType = (typeMapping.Converter?.ProviderClrType ?? typeMapping.ClrType)
-            .UnwrapNullableType()
-            .UnwrapEnumType();
-
-        if (underlyingType == typeof(bool))
-        {
-            return JsonValueType.Bool;
-        }
-
-        if (underlyingType == typeof(byte)
-            || underlyingType == typeof(short)
-            || underlyingType == typeof(int)
-            || underlyingType == typeof(long)
-            || underlyingType == typeof(float)
-            || underlyingType == typeof(double)
-            || underlyingType == typeof(decimal)
-            || underlyingType == typeof(sbyte)
-            || underlyingType == typeof(ushort)
-            || underlyingType == typeof(uint)
-            || underlyingType == typeof(ulong))
-        {
-            return JsonValueType.Number;
-        }
-
-        return JsonValueType.String;
+        return new RelationalJsonScalar(parentElement, property.IsNullable);
     }
 
     private static void AddViews(

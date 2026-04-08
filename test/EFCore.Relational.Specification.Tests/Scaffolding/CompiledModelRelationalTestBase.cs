@@ -424,7 +424,6 @@ public abstract class CompiledModelRelationalTestBase(NonSharedFixture fixture) 
             {
                 Assert.Same(ownedDetailsProperty, m.Property);
                 Assert.Equal("Details", m.Element.PropertyName);
-                Assert.IsAssignableFrom<IRelationalJsonScalar>(m.Element);
                 Assert.Same((RelationalTypeMapping)ownedDetailsProperty.GetTypeMapping(), m.Element.StoreTypeMapping);
                 Assert.NotNull(m.TableMapping);
             });

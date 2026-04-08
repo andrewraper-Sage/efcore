@@ -6236,14 +6236,6 @@
       ]
     },
     {
-      "Type": "interface Microsoft.EntityFrameworkCore.Metadata.IRelationalJsonScalar : Microsoft.EntityFrameworkCore.Metadata.IRelationalJsonElement",
-      "Properties": [
-        {
-          "Member": "Microsoft.EntityFrameworkCore.Metadata.JsonValueType Microsoft.EntityFrameworkCore.Metadata.IRelationalJsonScalar.ValueType { get; }"
-        }
-      ]
-    },
-    {
       "Type": "interface Microsoft.EntityFrameworkCore.Query.IRelationalLiftableConstantFactory : Microsoft.EntityFrameworkCore.Query.ILiftableConstantFactory",
       "Stage": "Experimental",
       "Methods": [
@@ -7493,28 +7485,6 @@
     },
     {
       "Type": "sealed class Microsoft.EntityFrameworkCore.Storage.JsonTypePlaceholder"
-    },
-    {
-      "Type": "enum Microsoft.EntityFrameworkCore.Metadata.JsonValueType",
-      "Methods": [
-        {
-          "Member": "Microsoft.EntityFrameworkCore.Metadata.JsonValueType.JsonValueType();"
-        }
-      ],
-      "Fields": [
-        {
-          "Member": "const Microsoft.EntityFrameworkCore.Metadata.JsonValueType Microsoft.EntityFrameworkCore.Metadata.JsonValueType.Bool",
-          "Value": "2"
-        },
-        {
-          "Member": "const Microsoft.EntityFrameworkCore.Metadata.JsonValueType Microsoft.EntityFrameworkCore.Metadata.JsonValueType.Number",
-          "Value": "1"
-        },
-        {
-          "Member": "const Microsoft.EntityFrameworkCore.Metadata.JsonValueType Microsoft.EntityFrameworkCore.Metadata.JsonValueType.String",
-          "Value": "0"
-        }
-      ]
     },
     {
       "Type": "class Microsoft.EntityFrameworkCore.Query.SqlExpressions.LeftJoinExpression : Microsoft.EntityFrameworkCore.Query.SqlExpressions.PredicateJoinExpressionBase",

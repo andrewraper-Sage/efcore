@@ -9,7 +9,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Internal;
 ///     any release. You should only use it directly in your code with extreme caution and knowing that
 ///     doing so can result in application failures when updating to a new Entity Framework Core release.
 /// </summary>
-public class RelationalJsonScalar : RelationalJsonElement, IRelationalJsonScalar
+public class RelationalJsonScalar : RelationalJsonElement
 {
     /// <summary>
     ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
@@ -20,11 +20,9 @@ public class RelationalJsonScalar : RelationalJsonElement, IRelationalJsonScalar
     public RelationalJsonScalar(
         string name,
         RelationalJsonObject parentElement,
-        bool isNullable,
-        JsonValueType valueType)
+        bool isNullable)
         : base(name, parentElement, isNullable)
     {
-        ValueType = valueType;
     }
 
     /// <summary>
@@ -35,13 +33,8 @@ public class RelationalJsonScalar : RelationalJsonElement, IRelationalJsonScalar
     /// </summary>
     public RelationalJsonScalar(
         RelationalJsonArray parentElement,
-        bool isNullable,
-        JsonValueType valueType)
+        bool isNullable)
         : base(parentElement, isNullable)
     {
-        ValueType = valueType;
     }
-
-    /// <inheritdoc />
-    public virtual JsonValueType ValueType { get; }
 }

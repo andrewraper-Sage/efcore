@@ -3364,10 +3364,8 @@ namespace Microsoft.EntityFrameworkCore.Metadata
             var dateProperty = dateDetailsObject.FindProperty("Date");
             Assert.NotNull(dateProperty);
             Assert.IsType<RelationalJsonScalar>(dateProperty);
-            var dateJsonProp = (IRelationalJsonScalar)dateProperty;
             Assert.Equal("Date", dateProperty.PropertyName);
             Assert.False(dateProperty.IsNullable);
-            Assert.Equal(JsonValueType.String, dateJsonProp.ValueType);
             Assert.Single(dateProperty.Path);
             Assert.Equal("Date", dateProperty.Path[0].PropertyName);
             Assert.Same(dateDetailsRoot, dateProperty.ParentElement);
@@ -3390,12 +3388,10 @@ namespace Microsoft.EntityFrameworkCore.Metadata
             var streetProperty = addressObject.FindProperty("Street");
             Assert.NotNull(streetProperty);
             Assert.IsType<RelationalJsonScalar>(streetProperty);
-            Assert.Equal(JsonValueType.String, ((IRelationalJsonScalar)streetProperty).ValueType);
 
             var cityProperty = addressObject.FindProperty("City");
             Assert.NotNull(cityProperty);
             Assert.IsType<RelationalJsonScalar>(cityProperty);
-            Assert.Equal(JsonValueType.String, ((IRelationalJsonScalar)cityProperty).ValueType);
 
             // Path through array should have 2 segments: ArrayIndex, PropertyName
             Assert.Equal(2, streetProperty.Path.Count);
@@ -3428,7 +3424,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata
             // Validate scalar property has JSON element mappings
             var dateDetailsEntityType = dateDetailsNavigation.TargetEntityType;
             var datePropertyModel = dateDetailsEntityType.FindProperty("Date")!;
-            Assert.Same((RelationalTypeMapping)datePropertyModel.GetTypeMapping(), dateJsonProp.StoreTypeMapping);
+            Assert.Same((RelationalTypeMapping)datePropertyModel.GetTypeMapping(), dateProperty.StoreTypeMapping);
             var datePropertyMappings = datePropertyModel.GetJsonElementMappings().ToList();
             Assert.NotEmpty(datePropertyMappings);
             Assert.All(datePropertyMappings, m => Assert.Equal("Date", m.Element.PropertyName));
@@ -3502,12 +3498,10 @@ namespace Microsoft.EntityFrameworkCore.Metadata
             // Check value types
             var valueProp = jsonObject.FindProperty("Value");
             Assert.NotNull(valueProp);
-            Assert.Equal(JsonValueType.String, ((IRelationalJsonScalar)valueProp).ValueType);
             Assert.True(valueProp.IsNullable);
 
             var numberProp = jsonObject.FindProperty("Number");
             Assert.NotNull(numberProp);
-            Assert.Equal(JsonValueType.Number, ((IRelationalJsonScalar)numberProp).ValueType);
             Assert.False(numberProp.IsNullable);
 
             // Validate FindColumn(IPropertyBase) with complex property
@@ -3571,20 +3565,17 @@ namespace Microsoft.EntityFrameworkCore.Metadata
             AssertPrimitiveCollectionJsonMapping(
                 ownedType.FindProperty(nameof(JsonOwnedWithTags.Tags))!,
                 table,
-                column,
-                JsonValueType.String);
+                column);
 
             AssertPrimitiveCollectionJsonMapping(
                 ownedType.FindProperty(nameof(JsonOwnedWithTags.EnumValues))!,
                 table,
-                column,
-                JsonValueType.Number);
+                column);
 
             static void AssertPrimitiveCollectionJsonMapping(
                 IProperty property,
                 ITable table,
-                IColumnBase containingColumn,
-                JsonValueType expectedElementValueType)
+                IColumnBase containingColumn)
             {
                 var column = table.FindColumn(property);
                 Assert.NotNull(column);
@@ -3600,11 +3591,10 @@ namespace Microsoft.EntityFrameworkCore.Metadata
 
                 var mapping = Assert.Single(mappings, m => ReferenceEquals(m.TableMapping.Table, table));
                 var jsonArray = Assert.IsAssignableFrom<IRelationalJsonArray>(mapping.Element);
-                var jsonElement = Assert.IsAssignableFrom<IRelationalJsonScalar>(jsonArray.ElementType);
+                var jsonElement = Assert.IsAssignableFrom<RelationalJsonScalar>(jsonArray.ElementType);
 
                 Assert.Equal(property.Name, jsonArray.PropertyName);
                 Assert.Same((RelationalTypeMapping)property.GetTypeMapping(), jsonArray.StoreTypeMapping);
-                Assert.Equal(expectedElementValueType, jsonElement.ValueType);
                 Assert.Same((RelationalTypeMapping)property.GetTypeMapping().ElementTypeMapping!, jsonElement.StoreTypeMapping);
                 Assert.NotEmpty(jsonArray.Path);
                 Assert.Equal(property.Name, jsonArray.Path[^1].PropertyName);

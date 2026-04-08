@@ -489,7 +489,6 @@ public class RelationalCSharpRuntimeAnnotationCodeGenerator : CSharpRuntimeAnnot
             var code = Dependencies.CSharpHelper;
             var mainBuilder = parameters.MainBuilder;
             AddNamespace(typeof(RelationalJsonObject), parameters.Namespaces);
-            AddNamespace(typeof(JsonValueType), parameters.Namespaces);
 
             var columnVariable = parameters.ScopeVariables.TryGetValue(column, out var cv)
                 ? cv
@@ -598,7 +597,7 @@ public class RelationalCSharpRuntimeAnnotationCodeGenerator : CSharpRuntimeAnnot
         {
             IRelationalJsonObject jsonObject => CreateJsonObject(jsonObject, columnVariable, parentLiteral, parameters),
             IRelationalJsonArray jsonArray => CreateJsonArray(jsonArray, columnVariable, parentLiteral, parameters),
-            IRelationalJsonScalar jsonProperty => CreateJsonProperty(jsonProperty, columnVariable, parentLiteral, parameters),
+            RelationalJsonScalar jsonScalar => CreateJsonProperty(jsonScalar, columnVariable, parentLiteral, parameters),
             _ => throw new UnreachableException()
         };
     }
@@ -612,6 +611,7 @@ public class RelationalCSharpRuntimeAnnotationCodeGenerator : CSharpRuntimeAnnot
         var code = Dependencies.CSharpHelper;
         var mainBuilder = parameters.MainBuilder;
         var variable = code.Identifier((jsonObject.PropertyName ?? "element") + "JsonObject", jsonObject, parameters.ScopeObjects, capitalize: false);
+        parameters.ScopeVariables[jsonObject] = variable;
 
         mainBuilder.Append($"var {variable} = new RelationalJsonObject(");
         AppendJsonConstructorArgs(jsonObject, columnVariable, parentLiteral, mainBuilder, code);
@@ -619,7 +619,7 @@ public class RelationalCSharpRuntimeAnnotationCodeGenerator : CSharpRuntimeAnnot
 
         foreach (var child in jsonObject.Properties)
         {
-            var childVariable = CreateJsonElement(child, columnVariable, parameters with { ScopeVariables = new Dictionary<object, string>(parameters.ScopeVariables) { [jsonObject] = variable } });
+            var childVariable = CreateJsonElement(child, columnVariable, parameters);
             mainBuilder.AppendLine($"{variable}.AddProperty({childVariable});");
         }
 
@@ -636,31 +636,32 @@ public class RelationalCSharpRuntimeAnnotationCodeGenerator : CSharpRuntimeAnnot
         var mainBuilder = parameters.MainBuilder;
 
         var variable = code.Identifier((jsonArray.PropertyName ?? "array") + "JsonArray", jsonArray, parameters.ScopeObjects, capitalize: false);
+        parameters.ScopeVariables[jsonArray] = variable;
 
         mainBuilder.Append($"var {variable} = new RelationalJsonArray(");
         AppendJsonConstructorArgs(jsonArray, columnVariable, parentLiteral, mainBuilder, code);
         mainBuilder.AppendLine(");");
 
-        var elementTypeVariable = CreateJsonElement(jsonArray.ElementType, columnVariable,
-            parameters with { ScopeVariables = new Dictionary<object, string>(parameters.ScopeVariables) { [jsonArray] = variable } });
+        var elementTypeVariable = CreateJsonElement(jsonArray.ElementType, columnVariable, parameters);
         mainBuilder.AppendLine($"{variable}.ElementType = {elementTypeVariable};");
 
         return variable;
     }
 
     private string CreateJsonProperty(
-        IRelationalJsonScalar jsonProperty,
+        RelationalJsonScalar jsonScalar,
         string columnVariable,
         string parentLiteral,
         CSharpRuntimeAnnotationCodeGeneratorParameters parameters)
     {
         var code = Dependencies.CSharpHelper;
         var mainBuilder = parameters.MainBuilder;
-        var variable = code.Identifier((jsonProperty.PropertyName ?? "scalar") + "JsonScalar", jsonProperty, parameters.ScopeObjects, capitalize: false);
+        var variable = code.Identifier((jsonScalar.PropertyName ?? "scalar") + "JsonScalar", jsonScalar, parameters.ScopeObjects, capitalize: false);
+        parameters.ScopeVariables[jsonScalar] = variable;
 
         mainBuilder.Append($"var {variable} = new RelationalJsonScalar(");
-        AppendJsonConstructorArgs(jsonProperty, columnVariable, parentLiteral, mainBuilder, code);
-        mainBuilder.Append($", JsonValueType.{jsonProperty.ValueType})").AppendLine(";");
+        AppendJsonConstructorArgs(jsonScalar, columnVariable, parentLiteral, mainBuilder, code);
+        mainBuilder.AppendLine(");");
 
         return variable;
     }
