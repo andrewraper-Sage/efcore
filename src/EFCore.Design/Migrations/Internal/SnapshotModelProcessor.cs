@@ -83,7 +83,10 @@ public class SnapshotModelProcessor : ISnapshotModelProcessor
         }
 
         mutableModel.RemoveAnnotation("ChangeDetector.SkipDetectChanges");
-        mutableModel.SetProductVersion(ProductInfo.GetVersion());
+        if (resetVersion)
+        {
+            mutableModel.SetProductVersion(ProductInfo.GetVersion());
+        }
 
         return _modelRuntimeInitializer.Initialize((IModel)model, designTime: true, validationLogger: null);
     }
