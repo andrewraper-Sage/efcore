@@ -399,7 +399,8 @@ public class Migrator : IMigrator
             }
 
             var snapshotVersion = _migrationsAssembly.ModelSnapshot.Model.GetProductVersion();
-            if (new SemanticVersionComparer().Compare(snapshotVersion, ProductInfo.GetVersion()) < 0)
+            if (snapshotVersion == null
+                || new SemanticVersionComparer().Compare(snapshotVersion, ProductInfo.GetVersion()) < 0)
             {
                 _logger.OldMigrationVersionWarning(_migrationsAssembly.Migrations.Values.Last(), snapshotVersion);
             }

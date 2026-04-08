@@ -2429,7 +2429,7 @@ public static class RelationalLoggerExtensions
 
         if (diagnostics.ShouldLog(definition))
         {
-            definition.Log(diagnostics, migrationType.Name, migrationVersion ?? "");
+            definition.Log(diagnostics, migrationType.Name, migrationVersion ?? "(unknown)");
         }
 
         if (diagnostics.NeedsEventData(definition, out var diagnosticSourceEnabled, out var simpleLogEnabled))
@@ -2448,7 +2448,7 @@ public static class RelationalLoggerExtensions
     {
         var d = (EventDefinition<string, string>)definition;
         var p = (MigrationVersionEventData)payload;
-        return d.GenerateMessage(p.MigrationType.Name, p.MigrationVersion ?? "");
+        return d.GenerateMessage(p.MigrationType.Name, p.MigrationVersion ?? "(unknown)");
     }
 
     /// <summary>
