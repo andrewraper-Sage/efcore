@@ -877,7 +877,7 @@
     <comment>Information RelationalEventId.ModelSnapshotNotFound string</comment>
   </data>
   <data name="LogOldMigrationVersion" xml:space="preserve">
-    <value>The last migration '{migrationName}' was created with EF Core version '{efVersion}'. The current version is newer. Consider adding a new empty migration to take advantage of any bug fixes and improvements in the current version of EF Core.</value>
+    <value>The last migration '{migrationName}' was created with EF Core version '{efVersion}'. Consider adding a new empty migration to take advantage of bug fixes and improvements in the current version of EF Core.</value>
     <comment>Warning RelationalEventId.OldMigrationVersionWarning string string</comment>
   </data>
   <data name="LogNonDeterministicModel" xml:space="preserve">
