@@ -781,7 +781,8 @@ GO
                     RelationalResources.LogOldMigrationVersion(new TestLogger<TestRelationalLoggingDefinitions>())
                         .GenerateMessage(nameof(BloggingMigration2), "9.0.0"),
                     "RelationalEventId.OldMigrationVersionWarning"),
-                (Assert.Throws<InvalidOperationException>(context.Database.Migrate)).Message);
+                (Assert.Throws<InvalidOperationException>(
+                    () => context.Database.Migrate("00000000000002_Migration2"))).Message);
         }
 
         [ConditionalFact]
@@ -802,7 +803,8 @@ GO
                     RelationalResources.LogOldMigrationVersion(new TestLogger<TestRelationalLoggingDefinitions>())
                         .GenerateMessage(nameof(BloggingMigration2), "9.0.0"),
                     "RelationalEventId.OldMigrationVersionWarning"),
-                (await Assert.ThrowsAsync<InvalidOperationException>(() => context.Database.MigrateAsync())).Message);
+                (await Assert.ThrowsAsync<InvalidOperationException>(
+                    () => context.Database.MigrateAsync("00000000000002_Migration2"))).Message);
         }
 
         [ConditionalFact]

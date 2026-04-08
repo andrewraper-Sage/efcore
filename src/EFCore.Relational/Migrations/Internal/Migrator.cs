@@ -397,14 +397,36 @@ public class Migrator : IMigrator
                 }
             }
 
-            var snapshotVersion = _migrationsAssembly.ModelSnapshot.Model.GetProductVersion();
-            var currentVersion = ProductInfo.GetVersion();
-            var currentMajorVersion = int.Parse(currentVersion[..currentVersion.IndexOf('.')]);
-            if (snapshotVersion == null
-                || !int.TryParse(snapshotVersion[..snapshotVersion.IndexOf('.')], out var snapshotMajorVersion)
-                || snapshotMajorVersion < currentMajorVersion)
+            if (targetMigration != null)
             {
-                _logger.OldMigrationVersionWarning(_migrationsAssembly.Migrations.Values.Last(), snapshotVersion);
+                var snapshotVersion = _migrationsAssembly.ModelSnapshot.Model.GetProductVersion();
+                var currentVersion = ProductInfo.GetVersion();
+
+                static bool TryGetMajorVersion(string? version, out int majorVersion)
+                {
+                    majorVersion = default;
+                    if (string.IsNullOrEmpty(version))
+                    {
+                        return false;
+                    }
+
+                    var separatorIndex = version.IndexOf('.');
+                    return separatorIndex > 0
+                        && int.TryParse(version.AsSpan(0, separatorIndex), out majorVersion);
+                }
+
+                if (snapshotVersion != null
+                    && TryGetMajorVersion(currentVersion, out var currentMajorVersion)
+                    && TryGetMajorVersion(snapshotVersion, out var snapshotMajorVersion)
+                    && snapshotMajorVersion < currentMajorVersion)
+                {
+                    var resolvedMigrationId = _migrationsAssembly.FindMigrationId(targetMigration);
+                    if (resolvedMigrationId != null
+                        && _migrationsAssembly.Migrations.TryGetValue(resolvedMigrationId, out var migrationType))
+                    {
+                        _logger.OldMigrationVersionWarning(migrationType, snapshotVersion);
+                    }
+                }
             }
         }
 
