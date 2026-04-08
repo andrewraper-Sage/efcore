@@ -927,11 +927,12 @@ public class RelationalModel : Annotatable, IRelationalModel
 
     private static RelationalJsonScalar CreatePrimitiveCollectionJsonElement(RelationalJsonArray parentElement, IProperty property)
     {
-        var elementTypeMapping = (RelationalTypeMapping?)property.GetElementType()?.GetTypeMapping()
+        var elementType = property.GetElementType();
+        var elementTypeMapping = (RelationalTypeMapping?)elementType?.GetTypeMapping()
             ?? (RelationalTypeMapping?)property.GetTypeMapping().ElementTypeMapping;
         Check.DebugAssert(elementTypeMapping != null, $"Missing element type mapping for primitive collection '{property.DeclaringType.DisplayName()}.{property.Name}'.");
 
-        return new RelationalJsonScalar(parentElement, property.IsNullable);
+        return new RelationalJsonScalar(parentElement, elementType?.IsNullable ?? property.IsNullable);
     }
 
     private static void AddViews(
