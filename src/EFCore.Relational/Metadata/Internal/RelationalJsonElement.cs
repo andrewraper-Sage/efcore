@@ -92,11 +92,16 @@ public abstract class RelationalJsonElement : IRelationalJsonElement
     ///     doing so can result in application failures when updating to a new Entity Framework Core release.
     /// </summary>
     protected virtual RelationalTypeMapping? GetDefaultStoreTypeMapping()
-     => PropertyMappings.Select(m => m.Property as IProperty).FirstOrDefault(p => p is not null)?.GetTypeMapping() is RelationalTypeMapping mapping
-            ? mapping
-            : ParentElement is IRelationalJsonArray jsonArray
-                ? (RelationalTypeMapping?)jsonArray.StoreTypeMapping?.ElementTypeMapping
-                : null;
+    {
+        if (PropertyMappings.Select(m => m.Property).OfType<IProperty>().FirstOrDefault()?.GetTypeMapping() is RelationalTypeMapping mapping)
+        {
+            return mapping;
+        }
+
+        return ParentElement is IRelationalJsonArray { StoreTypeMapping: { ElementTypeMapping: RelationalTypeMapping elementTypeMapping } }
+            ? elementTypeMapping
+            : null;
+    }
 
     /// <summary>
     ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to

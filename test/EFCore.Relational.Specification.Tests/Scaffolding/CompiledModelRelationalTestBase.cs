@@ -384,7 +384,7 @@ public abstract class CompiledModelRelationalTestBase(NonSharedFixture fixture) 
                 });
 
                 Assert.Empty(jsonArray.ElementType.PropertyMappings);
-                Assert.NotNull(jsonArray.ElementType.StoreTypeMapping);
+                Assert.Same((RelationalTypeMapping)property.GetTypeMapping().ElementTypeMapping!, jsonArray.ElementType.StoreTypeMapping);
             }
 
             // Verify JSON element is on the Owned column
@@ -399,42 +399,44 @@ public abstract class CompiledModelRelationalTestBase(NonSharedFixture fixture) 
             var ownedJsonObject = (IRelationalJsonObject)ownedJsonRoot;
             Assert.NotEmpty(ownedJsonObject.Properties);
 
-            // GetJsonElementMappings is populated by the runtime relational model builder,
-            // not by the compiled model code generator
-            if (ownedJsonRoot.PropertyMappings.Count > 0)
+            Assert.NotEmpty(ownedJsonRoot.PropertyMappings);
+            Assert.All(ownedJsonRoot.PropertyMappings, m =>
             {
-                // Verify GetJsonElementMappings for the owned navigation
-                var ownedMappings = referenceOwnedNavigation.GetJsonElementMappings().ToList();
-                Assert.NotEmpty(ownedMappings);
-                Assert.All(ownedMappings, m =>
-                {
-                    Assert.Same(referenceOwnedNavigation, m.Property);
-                    Assert.IsAssignableFrom<IRelationalJsonObject>(m.Element);
-                    Assert.Equal("PrincipalBase", m.TableMapping.Table.Name);
-                });
+                Assert.Same(referenceOwnedNavigation, m.Property);
+                Assert.Same(ownedJsonRoot, m.Element);
+            });
 
-                // Verify scalar properties inside the owned entity have JSON element mappings
-                var ownedDetailsProperty = referenceOwnedType.FindProperty(nameof(OwnedType.Details))!;
-                var detailsMappings = ownedDetailsProperty.GetJsonElementMappings().ToList();
-                Assert.NotEmpty(detailsMappings);
-                Assert.All(detailsMappings, m =>
-                {
-                    Assert.Same(ownedDetailsProperty, m.Property);
-                    Assert.Equal("Details", m.Element.PropertyName);
-                    Assert.IsAssignableFrom<IRelationalJsonScalar>(m.Element);
-                    Assert.Same((RelationalTypeMapping)ownedDetailsProperty.GetTypeMapping(), m.Element.StoreTypeMapping);
-                    Assert.NotNull(m.TableMapping);
-                });
+            // Verify GetJsonElementMappings for the owned navigation
+            var ownedMappings = referenceOwnedNavigation.GetJsonElementMappings().ToList();
+            Assert.NotEmpty(ownedMappings);
+            Assert.All(ownedMappings, m =>
+            {
+                Assert.Same(referenceOwnedNavigation, m.Property);
+                Assert.IsAssignableFrom<IRelationalJsonObject>(m.Element);
+                Assert.Same(referenceOwnedNavigation.TargetEntityType, m.TableMapping.TypeBase);
+            });
 
-                // Verify ManyOwned collection navigation has mappings
-                var manyOwnedMappings = ownedCollectionNavigation.GetJsonElementMappings().ToList();
-                Assert.NotEmpty(manyOwnedMappings);
-                Assert.All(manyOwnedMappings, m =>
-                {
-                    Assert.Same(ownedCollectionNavigation, m.Property);
-                    Assert.NotNull(m.TableMapping);
-                });
-            }
+            // Verify scalar properties inside the owned entity have JSON element mappings
+            var ownedDetailsProperty = referenceOwnedType.FindProperty(nameof(OwnedType.Details))!;
+            var detailsMappings = ownedDetailsProperty.GetJsonElementMappings().ToList();
+            Assert.NotEmpty(detailsMappings);
+            Assert.All(detailsMappings, m =>
+            {
+                Assert.Same(ownedDetailsProperty, m.Property);
+                Assert.Equal("Details", m.Element.PropertyName);
+                Assert.IsAssignableFrom<IRelationalJsonScalar>(m.Element);
+                Assert.Same((RelationalTypeMapping)ownedDetailsProperty.GetTypeMapping(), m.Element.StoreTypeMapping);
+                Assert.NotNull(m.TableMapping);
+            });
+
+            // Verify ManyOwned collection navigation has mappings
+            var manyOwnedMappings = ownedCollectionNavigation.GetJsonElementMappings().ToList();
+            Assert.NotEmpty(manyOwnedMappings);
+            Assert.All(manyOwnedMappings, m =>
+            {
+                Assert.Same(ownedCollectionNavigation, m.Property);
+                Assert.NotNull(m.TableMapping);
+            });
 
             // Verify FindColumn works for navigation
             var foundColumn = principalBaseTable.FindColumn(referenceOwnedNavigation);

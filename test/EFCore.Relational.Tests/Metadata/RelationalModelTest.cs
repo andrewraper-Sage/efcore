@@ -3435,6 +3435,37 @@ namespace Microsoft.EntityFrameworkCore.Metadata
         }
 
         [ConditionalFact]
+        public void Json_element_tree_is_merged_for_existing_json_columns()
+        {
+            var modelBuilder = CreateConventionModelBuilder();
+
+            modelBuilder.Entity<EntityWithNestedComplexProperty>()
+                .ComplexProperty(
+                    e => e.ComplexProperty,
+                    b => b.ToJson("complex_data"));
+
+            var model = Finalize(modelBuilder);
+            var table = model.Tables.Single();
+            var jsonColumn = table.FindColumn("complex_data")!;
+
+            var jsonObject = Assert.IsAssignableFrom<IRelationalJsonObject>(jsonColumn.JsonElement);
+            var nestedObject = Assert.IsAssignableFrom<IRelationalJsonObject>(jsonObject.FindProperty("Nested"));
+            Assert.NotNull(nestedObject.FindProperty("Number"));
+
+            var entityType = model.Model.FindEntityType(typeof(EntityWithNestedComplexProperty))!;
+            var complexProperty = entityType.FindComplexProperty(nameof(EntityWithNestedComplexProperty.ComplexProperty))!;
+            var nestedComplexProperty = complexProperty.ComplexType.FindComplexProperty(nameof(OuterComplexData.Nested))!;
+
+            Assert.Same(jsonColumn, table.FindColumn(complexProperty));
+            Assert.Same(jsonColumn, table.FindColumn(nestedComplexProperty));
+
+            var numberProperty = nestedComplexProperty.ComplexType.FindProperty(nameof(NestedComplexData.Number))!;
+            var numberMappings = numberProperty.GetJsonElementMappings().ToList();
+            Assert.NotEmpty(numberMappings);
+            Assert.All(numberMappings, m => Assert.Equal("Number", m.Element.PropertyName));
+        }
+
+        [ConditionalFact]
         public void Json_element_tree_is_built_for_complex_property_json_columns()
         {
             var modelBuilder = CreateConventionModelBuilder();
@@ -3574,7 +3605,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata
                 Assert.Equal(property.Name, jsonArray.PropertyName);
                 Assert.Same((RelationalTypeMapping)property.GetTypeMapping(), jsonArray.StoreTypeMapping);
                 Assert.Equal(expectedElementValueType, jsonElement.ValueType);
-                Assert.Null(jsonElement.StoreTypeMapping);
+                Assert.Same((RelationalTypeMapping)property.GetTypeMapping().ElementTypeMapping!, jsonElement.StoreTypeMapping);
                 Assert.NotEmpty(jsonArray.Path);
                 Assert.Equal(property.Name, jsonArray.Path[^1].PropertyName);
                 Assert.NotEmpty(jsonElement.Path);
@@ -3745,6 +3776,12 @@ namespace Microsoft.EntityFrameworkCore.Metadata
             public List<ComplexData> ComplexCollection { get; set; }
         }
 
+        private class EntityWithNestedComplexProperty
+        {
+            public int Id { get; set; }
+            public OuterComplexData ComplexProperty { get; set; }
+        }
+
         private abstract class TphBaseEntity
         {
             public int Id { get; set; }
@@ -3780,6 +3817,19 @@ namespace Microsoft.EntityFrameworkCore.Metadata
         private class ComplexData
         {
             public string Value { get; set; }
+            public int Number { get; set; }
+        }
+
+        [ComplexType]
+        private class OuterComplexData
+        {
+            public string Value { get; set; }
+            public NestedComplexData Nested { get; set; }
+        }
+
+        [ComplexType]
+        private class NestedComplexData
+        {
             public int Number { get; set; }
         }
     }

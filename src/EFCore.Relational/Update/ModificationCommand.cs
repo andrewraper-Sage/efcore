@@ -770,7 +770,7 @@ public class ModificationCommand : IModificationCommand, INonTrackedModification
                 }
 
                 var element = jsonProperty.GetJsonElementMappings()
-                    .SingleOrDefault(jm => jm.Element.ContainingColumn == jsonColumn)
+                    .SingleOrDefault(jm => ReferenceEquals(jm.TableMapping.Table, jsonColumn.Table))
                     ?.Element;
 
                 // When the final property maps to an array and we're updating a specific element

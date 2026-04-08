@@ -500,6 +500,91 @@ public class RelationalCSharpRuntimeAnnotationCodeGenerator : CSharpRuntimeAnnot
         }
     }
 
+    private void CreateJsonElementMappings(
+        ITableMappingBase tableMapping,
+        string tableMappingVariable,
+        CSharpRuntimeAnnotationCodeGeneratorParameters parameters)
+    {
+        foreach (var column in tableMapping.Table.Columns)
+        {
+            if (column.JsonElement != null)
+            {
+                CreateJsonElementMappings(column.JsonElement, tableMapping, tableMappingVariable, parameters);
+            }
+        }
+    }
+
+    private void CreateJsonElementMappings(
+        IRelationalJsonElement element,
+        ITableMappingBase tableMapping,
+        string tableMappingVariable,
+        CSharpRuntimeAnnotationCodeGeneratorParameters parameters)
+    {
+        if (parameters.ScopeVariables.TryGetValue(element, out var elementVariable))
+        {
+            foreach (var mapping in element.PropertyMappings.Where(m => ReferenceEquals(m.TableMapping, tableMapping)))
+            {
+                parameters.MainBuilder
+                    .Append("RelationalModel.CreateJsonElementMapping(")
+                    .Append(GetPropertyBaseAccess(mapping.Property, parameters))
+                    .Append(", ")
+                    .Append(elementVariable)
+                    .Append(", ")
+                    .Append(tableMappingVariable)
+                    .AppendLine(");");
+            }
+        }
+
+        switch (element)
+        {
+            case IRelationalJsonObject jsonObject:
+                foreach (var child in jsonObject.Properties)
+                {
+                    CreateJsonElementMappings(child, tableMapping, tableMappingVariable, parameters);
+                }
+
+                break;
+            case IRelationalJsonArray jsonArray:
+                CreateJsonElementMappings(jsonArray.ElementType, tableMapping, tableMappingVariable, parameters);
+                break;
+        }
+    }
+
+    private string GetPropertyBaseAccess(
+        IPropertyBase propertyBase,
+        CSharpRuntimeAnnotationCodeGeneratorParameters parameters)
+    {
+        var code = Dependencies.CSharpHelper;
+        var declaringTypeAccess = GetTypeBaseAccess(propertyBase.DeclaringType, parameters);
+
+        return propertyBase switch
+        {
+            IProperty property => $"{declaringTypeAccess}.FindProperty({code.Literal(property.Name)})!",
+            IComplexProperty complexProperty => $"{declaringTypeAccess}.FindComplexProperty({code.Literal(complexProperty.Name)})!",
+            INavigation navigation => $"{declaringTypeAccess}.FindNavigation({code.Literal(navigation.Name)})!",
+            _ => throw new UnreachableException()
+        };
+    }
+
+    private string GetTypeBaseAccess(
+        ITypeBase typeBase,
+        CSharpRuntimeAnnotationCodeGeneratorParameters parameters)
+    {
+        var code = Dependencies.CSharpHelper;
+        if (parameters.ScopeVariables.TryGetValue(typeBase, out var variable))
+        {
+            return variable;
+        }
+
+        return typeBase switch
+        {
+            IEntityType entityType => $"FindEntityType({code.Literal(entityType.Name)})!",
+            IComplexType complexType
+                => $"{GetTypeBaseAccess(complexType.ComplexProperty.DeclaringType, parameters)}.FindComplexProperty({code.Literal(complexType.ComplexProperty.Name)})!.ComplexType",
+            _ => throw new UnreachableException()
+        };
+    }
+
     private string CreateJsonElement(
         IRelationalJsonElement element,
         string columnVariable,
@@ -1317,6 +1402,8 @@ public class RelationalCSharpRuntimeAnnotationCodeGenerator : CSharpRuntimeAnnot
                 .Append($"{typeBaseVariable}.FindProperty({code.Literal(columnMapping.Property.Name)})!, ")
                 .Append(tableMappingVariable).AppendLine(");");
         }
+
+        CreateJsonElementMappings(tableMapping, tableMappingVariable, parameters);
     }
 
     /// <summary>
@@ -1368,6 +1455,8 @@ public class RelationalCSharpRuntimeAnnotationCodeGenerator : CSharpRuntimeAnnot
                 .Append($"{typeBaseVariable}.FindProperty({code.Literal(columnMapping.Property.Name)})!, ")
                 .Append(tableMappingVariable).AppendLine(");");
         }
+
+        CreateJsonElementMappings(tableMapping, tableMappingVariable, parameters);
 
         if (tableMapping == table.EntityTypeMappings.Last())
         {
@@ -1437,6 +1526,8 @@ public class RelationalCSharpRuntimeAnnotationCodeGenerator : CSharpRuntimeAnnot
                 .Append($"{typeBaseVariable}.FindProperty({code.Literal(columnMapping.Property.Name)})!, ")
                 .Append(viewMappingVariable).AppendLine(");");
         }
+
+        CreateJsonElementMappings(viewMapping, viewMappingVariable, parameters);
     }
 
     /// <summary>
@@ -1490,6 +1581,8 @@ public class RelationalCSharpRuntimeAnnotationCodeGenerator : CSharpRuntimeAnnot
                 .Append($"{typeBaseVariable}.FindProperty({code.Literal(columnMapping.Property.Name)})!, ")
                 .Append(sqlQueryMappingVariable).AppendLine(");");
         }
+
+        CreateJsonElementMappings(sqlQueryMapping, sqlQueryMappingVariable, parameters);
     }
 
     /// <summary>
@@ -1545,6 +1638,8 @@ public class RelationalCSharpRuntimeAnnotationCodeGenerator : CSharpRuntimeAnnot
                 .Append($"{typeBaseVariable}.FindProperty({code.Literal(columnMapping.Property.Name)})!, ")
                 .Append(functionMappingVariable).AppendLine(");");
         }
+
+        CreateJsonElementMappings(functionMapping, functionMappingVariable, parameters);
     }
 
     /// <summary>

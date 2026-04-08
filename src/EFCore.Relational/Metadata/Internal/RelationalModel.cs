@@ -612,35 +612,34 @@ public class RelationalModel : Annotatable, IRelationalModel
             return;
         }
 
-        if (tableBase.FindColumn(containerColumnName) != null)
+        var jsonColumn = (ColumnBase<TColumnMappingBase>?)tableBase.FindColumn(containerColumnName);
+        if (jsonColumn == null)
         {
-            // TODO: Add column mapping #36646
-            return;
-        }
+            var jsonColumnTypeMapping = relationalTypeMappingSource.FindMapping(
+                typeof(JsonTypePlaceholder), storeTypeName: containerColumnType);
+            if (jsonColumnTypeMapping == null)
+            {
+                throw new InvalidOperationException(
+                    RelationalStrings.UnsupportedJsonColumnType(containerColumnType ?? "null", containerColumnName, tableBase.Name));
+            }
 
-        var jsonColumnTypeMapping = relationalTypeMappingSource.FindMapping(
-            typeof(JsonTypePlaceholder), storeTypeName: containerColumnType);
-        if (jsonColumnTypeMapping == null)
-        {
-            throw new InvalidOperationException(
-                RelationalStrings.UnsupportedJsonColumnType(containerColumnType ?? "null", containerColumnName, tableBase.Name));
+            jsonColumn = createColumn(containerColumnName, containerColumnType, tableBase, jsonColumnTypeMapping);
+            tableBase.Columns.Add(containerColumnName, jsonColumn);
         }
-
-        var jsonColumn = createColumn(containerColumnName, containerColumnType, tableBase, jsonColumnTypeMapping);
-        tableBase.Columns.Add(containerColumnName, jsonColumn);
 
         if (ownership != null)
         {
-            jsonColumn.IsNullable = !ownership.IsRequiredDependent || !ownership.IsUnique;
+            var isNullable = !ownership.IsRequiredDependent || !ownership.IsUnique;
 
-            if (!jsonColumn.IsNullable
+            if (!isNullable
                 && ownership.PrincipalEntityType.BaseType != null
                 && ownership.PrincipalEntityType.GetMappingStrategy() == RelationalAnnotationNames.TphMappingStrategy)
             {
                 // if navigation is defined on a derived type in TPH, the column must be made nullable
-                jsonColumn.IsNullable = true;
+                isNullable = true;
             }
 
+            jsonColumn.IsNullable = jsonColumn.IsNullable || isNullable;
             BuildJsonElementTree(jsonColumn, ownership, tableMapping);
         }
         else
@@ -648,7 +647,7 @@ public class RelationalModel : Annotatable, IRelationalModel
             complexType = (IComplexType)mappedType;
 #pragma warning disable EF1001 // Internal EF Core API usage.
             var chain = complexType.ComplexProperty.GetChainToComplexProperty(fromEntity: true);
-            jsonColumn.IsNullable = complexType.ComplexProperty.IsNullable
+            var isNullable = complexType.ComplexProperty.IsNullable
                 || (chain[0].DeclaringType is IEntityType declaringEntityType
                     && declaringEntityType.BaseType != null
                     && (declaringEntityType.GetMappingStrategy() ?? RelationalAnnotationNames.TphMappingStrategy)
@@ -656,13 +655,19 @@ public class RelationalModel : Annotatable, IRelationalModel
                 || chain.Any(p => p.IsNullable);
 #pragma warning restore EF1001 // Internal EF Core API usage.
 
+            jsonColumn.IsNullable = jsonColumn.IsNullable || isNullable;
             BuildJsonElementTree(jsonColumn, complexType, tableMapping);
         }
     }
 
-    private static void AddJsonElementMapping(IPropertyBase property, IRelationalJsonElement element, ITableMappingBase tableMapping)
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    public static void CreateJsonElementMapping(IPropertyBase property, IRelationalJsonElement element, ITableMappingBase tableMapping)
     {
-        var mapping = new JsonElementMapping(property, element, tableMapping);
         if (property.FindRuntimeAnnotationValue(RelationalAnnotationNames.JsonElementMappings)
             is not List<JsonElementMapping> mappings)
         {
@@ -670,14 +675,28 @@ public class RelationalModel : Annotatable, IRelationalModel
             property.AddRuntimeAnnotation(RelationalAnnotationNames.JsonElementMappings, mappings);
         }
 
+        var existingMapping = mappings.SingleOrDefault(
+            m => ReferenceEquals(m.Property, property)
+                && ReferenceEquals(m.TableMapping.Table, tableMapping.Table));
+        if (existingMapping != null)
+        {
+            Check.DebugAssert(
+                ReferenceEquals(existingMapping.Element, element),
+                $"Property '{property.Name}' is already mapped to a different JSON element on table '{tableMapping.Table.Name}'.");
+
+            return;
+        }
+
+        var mapping = new JsonElementMapping(property, element, tableMapping);
         mappings.Add(mapping);
         ((RelationalJsonElement)element).AddPropertyMapping(mapping);
     }
 
-    private static void BuildJsonElementTree(
-        IColumnBase jsonColumn,
+    private static void BuildJsonElementTree<TColumnMappingBase>(
+        ColumnBase<TColumnMappingBase> jsonColumn,
         IForeignKey ownership,
         ITableMappingBase tableMapping)
+        where TColumnMappingBase : class, IColumnMappingBase
         => BuildJsonElementTree(
             jsonColumn,
             ownership.DeclaringEntityType,
@@ -686,10 +705,11 @@ public class RelationalModel : Annotatable, IRelationalModel
             ownership.GetNavigation(pointsToPrincipal: false)!,
             tableMapping);
 
-    private static void BuildJsonElementTree(
-        IColumnBase jsonColumn,
+    private static void BuildJsonElementTree<TColumnMappingBase>(
+        ColumnBase<TColumnMappingBase> jsonColumn,
         IComplexType complexType,
         ITableMappingBase tableMapping)
+        where TColumnMappingBase : class, IColumnMappingBase
         => BuildJsonElementTree(
             jsonColumn,
             complexType,
@@ -698,54 +718,61 @@ public class RelationalModel : Annotatable, IRelationalModel
             complexType.ComplexProperty,
             tableMapping);
 
-    private static void BuildJsonElementTree(
-        IColumnBase jsonColumn,
+    private static void BuildJsonElementTree<TColumnMappingBase>(
+        ColumnBase<TColumnMappingBase> jsonColumn,
         ITypeBase structuralType,
         bool isCollection,
         bool isNullable,
         IPropertyBase propertyBase,
         ITableMappingBase tableMapping)
+        where TColumnMappingBase : class, IColumnMappingBase
     {
         IRelationalJsonElement rootElement;
-        if (isCollection)
+        if (jsonColumn.JsonElement == null)
         {
-            var jsonArray = new RelationalJsonArray(jsonColumn, isNullable);
-            var jsonObject = new RelationalJsonObject(jsonArray, isNullable: false);
-            PopulateJsonObject(jsonObject, structuralType, tableMapping);
-            jsonArray.ElementType = jsonObject;
+            if (isCollection)
+            {
+                var jsonArray = new RelationalJsonArray(jsonColumn, isNullable);
+                var jsonObject = new RelationalJsonObject(jsonArray, isNullable: false);
+                PopulateJsonObject(jsonObject, structuralType, tableMapping);
+                jsonArray.ElementType = jsonObject;
+                rootElement = jsonArray;
+            }
+            else
+            {
+                var jsonObject = new RelationalJsonObject(jsonColumn, isNullable);
+                PopulateJsonObject(jsonObject, structuralType, tableMapping);
+                rootElement = jsonObject;
+            }
+
+            jsonColumn.JsonElement = rootElement;
+        }
+        else if (isCollection)
+        {
+            Check.DebugAssert(
+                jsonColumn.JsonElement is RelationalJsonArray,
+                $"JSON column '{jsonColumn.Name}' was previously created as an object.");
+
+            var jsonArray = (RelationalJsonArray)jsonColumn.JsonElement;
+            Check.DebugAssert(
+                jsonArray.ElementType is RelationalJsonObject,
+                $"JSON column '{jsonColumn.Name}' collection element is not an object.");
+
+            PopulateJsonObject((RelationalJsonObject)jsonArray.ElementType, structuralType, tableMapping);
             rootElement = jsonArray;
         }
         else
         {
-            var jsonObject = new RelationalJsonObject(jsonColumn, isNullable);
+            Check.DebugAssert(
+                jsonColumn.JsonElement is RelationalJsonObject,
+                $"JSON column '{jsonColumn.Name}' was previously created as a collection.");
+
+            var jsonObject = (RelationalJsonObject)jsonColumn.JsonElement;
             PopulateJsonObject(jsonObject, structuralType, tableMapping);
             rootElement = jsonObject;
         }
 
-        SetJsonElement(jsonColumn, rootElement);
-        AddJsonElementMapping(propertyBase, rootElement, tableMapping);
-    }
-
-    private static void SetJsonElement(IColumnBase column, IRelationalJsonElement element)
-    {
-        switch (column)
-        {
-            case ColumnBase<ColumnMappingBase> columnBase:
-                columnBase.JsonElement = element;
-                break;
-            case Column columnValue:
-                columnValue.JsonElement = element;
-                break;
-            case ViewColumn viewColumn:
-                viewColumn.JsonElement = element;
-                break;
-            case SqlQueryColumn sqlQueryColumn:
-                sqlQueryColumn.JsonElement = element;
-                break;
-            case FunctionColumn functionColumn:
-                functionColumn.JsonElement = element;
-                break;
-        }
+        CreateJsonElementMapping(propertyBase, rootElement, tableMapping);
     }
 
     private static void PopulateJsonObject(RelationalJsonObject jsonObject, ITypeBase structuralType, ITableMappingBase tableMapping)
@@ -756,20 +783,29 @@ public class RelationalModel : Annotatable, IRelationalModel
             var propertyTypeMapping = (RelationalTypeMapping)property.GetTypeMapping();
             if (property.IsPrimitiveCollection)
             {
-                var jsonArray = new RelationalJsonArray(propertyJsonName, jsonObject, property.IsNullable);
-                jsonArray.ElementType = CreatePrimitiveCollectionJsonElement(jsonArray, property);
+                var jsonArray = jsonObject.FindProperty(propertyJsonName) as RelationalJsonArray;
+                if (jsonArray == null)
+                {
+                    jsonArray = new RelationalJsonArray(propertyJsonName, jsonObject, property.IsNullable);
+                    jsonArray.ElementType = CreatePrimitiveCollectionJsonElement(jsonArray, property);
+                    jsonObject.AddProperty(jsonArray);
+                }
 
-                jsonObject.AddProperty(jsonArray);
-                AddJsonElementMapping(property, jsonArray, tableMapping);
+                CreateJsonElementMapping(property, jsonArray, tableMapping);
             }
             else
             {
-                var valueType = GetJsonValueType(propertyTypeMapping);
-                var jsonProperty = new RelationalJsonScalar(
-                    propertyJsonName, jsonObject,
-                    property.IsNullable, valueType);
-                jsonObject.AddProperty(jsonProperty);
-                AddJsonElementMapping(property, jsonProperty, tableMapping);
+                var jsonProperty = jsonObject.FindProperty(propertyJsonName) as RelationalJsonScalar;
+                if (jsonProperty == null)
+                {
+                    var valueType = GetJsonValueType(propertyTypeMapping);
+                    jsonProperty = new RelationalJsonScalar(
+                        propertyJsonName, jsonObject,
+                        property.IsNullable, valueType);
+                    jsonObject.AddProperty(jsonProperty);
+                }
+
+                CreateJsonElementMapping(property, jsonProperty, tableMapping);
             }
         }
 
@@ -779,21 +815,38 @@ public class RelationalModel : Annotatable, IRelationalModel
             var complexPropertyJsonName = complexProperty.ComplexType.GetJsonPropertyName() ?? complexProperty.Name;
             if (complexProperty.IsCollection)
             {
-                var jsonArray = new RelationalJsonArray(complexPropertyJsonName, jsonObject, complexProperty.IsNullable);
-                var childObject = new RelationalJsonObject(jsonArray, isNullable: false);
+                RelationalJsonObject childObject;
+                if (jsonObject.FindProperty(complexPropertyJsonName) is not RelationalJsonArray jsonArray)
+                {
+                    jsonArray = new RelationalJsonArray(complexPropertyJsonName, jsonObject, complexProperty.IsNullable);
+                    childObject = new RelationalJsonObject(jsonArray, isNullable: false);
+                    jsonArray.ElementType = childObject;
+                    jsonObject.AddProperty(jsonArray);
+                }
+                else
+                {
+                    Check.DebugAssert(
+                        jsonArray.ElementType is RelationalJsonObject,
+                        $"Complex JSON collection '{complexPropertyJsonName}' element is not an object.");
+                    childObject = (RelationalJsonObject)jsonArray.ElementType;
+                }
+
                 PopulateJsonObject(childObject, complexProperty.ComplexType, tableMapping);
-                jsonArray.ElementType = childObject;
                 childElement = jsonArray;
             }
             else
             {
-                var childObject = new RelationalJsonObject(complexPropertyJsonName, jsonObject, complexProperty.IsNullable);
+                if (jsonObject.FindProperty(complexPropertyJsonName) is not RelationalJsonObject childObject)
+                {
+                    childObject = new RelationalJsonObject(complexPropertyJsonName, jsonObject, complexProperty.IsNullable);
+                    jsonObject.AddProperty(childObject);
+                }
+
                 PopulateJsonObject(childObject, complexProperty.ComplexType, tableMapping);
                 childElement = childObject;
             }
 
-            jsonObject.AddProperty(childElement);
-            AddJsonElementMapping(complexProperty, childElement, tableMapping);
+            CreateJsonElementMapping(complexProperty, childElement, tableMapping);
         }
 
         if (structuralType is IEntityType entityType)
@@ -815,29 +868,49 @@ public class RelationalModel : Annotatable, IRelationalModel
                 IRelationalJsonElement childElement;
                 if (isCollection)
                 {
-                    var jsonArray = new RelationalJsonArray(navJsonName, jsonObject, isNullable);
-                    var childObject = new RelationalJsonObject(jsonArray, isNullable: false);
+                    var jsonArray = jsonObject.FindProperty(navJsonName) as RelationalJsonArray;
+                    RelationalJsonObject childObject;
+                    if (jsonArray == null)
+                    {
+                        jsonArray = new RelationalJsonArray(navJsonName, jsonObject, isNullable);
+                        childObject = new RelationalJsonObject(jsonArray, isNullable: false);
+                        jsonArray.ElementType = childObject;
+                        jsonObject.AddProperty(jsonArray);
+                    }
+                    else
+                    {
+                        Check.DebugAssert(
+                            jsonArray.ElementType is RelationalJsonObject,
+                            $"Owned JSON collection '{navJsonName}' element is not an object.");
+                        childObject = (RelationalJsonObject)jsonArray.ElementType;
+                    }
+
                     PopulateJsonObject(childObject, targetEntityType, tableMapping);
-                    jsonArray.ElementType = childObject;
                     childElement = jsonArray;
                 }
                 else
                 {
-                    var childObject = new RelationalJsonObject(navJsonName, jsonObject, isNullable);
+                    var childObject = jsonObject.FindProperty(navJsonName) as RelationalJsonObject;
+                    if (childObject == null)
+                    {
+                        childObject = new RelationalJsonObject(navJsonName, jsonObject, isNullable);
+                        jsonObject.AddProperty(childObject);
+                    }
+
                     PopulateJsonObject(childObject, targetEntityType, tableMapping);
                     childElement = childObject;
                 }
 
-                jsonObject.AddProperty(childElement);
-                AddJsonElementMapping(navigation, childElement, tableMapping);
+                CreateJsonElementMapping(navigation, childElement, tableMapping);
             }
         }
     }
 
-    private static void CreatePrimitiveCollectionJsonMapping(
-        IColumnBase column,
+    private static void CreatePrimitiveCollectionJsonMapping<TColumnMappingBase>(
+        ColumnBase<TColumnMappingBase> column,
         IProperty property,
         ITableMappingBase tableMapping)
+        where TColumnMappingBase : class, IColumnMappingBase
     {
         if (!property.IsPrimitiveCollection)
         {
@@ -848,16 +921,19 @@ public class RelationalModel : Annotatable, IRelationalModel
         {
             jsonArray = new RelationalJsonArray(column, property.IsNullable);
             jsonArray.ElementType = CreatePrimitiveCollectionJsonElement(jsonArray, property);
-            SetJsonElement(column, jsonArray);
+            column.JsonElement = jsonArray;
         }
 
-        AddJsonElementMapping(property, jsonArray, tableMapping);
+        CreateJsonElementMapping(property, jsonArray, tableMapping);
     }
 
     private static RelationalJsonScalar CreatePrimitiveCollectionJsonElement(RelationalJsonArray parentElement, IProperty property)
     {
-        var elementTypeMapping = (RelationalTypeMapping)property.GetTypeMapping().ElementTypeMapping!;
-        var scalarValueType = GetJsonValueType(elementTypeMapping);
+        var elementTypeMapping = (RelationalTypeMapping?)property.GetElementType()?.GetTypeMapping()
+            ?? (RelationalTypeMapping?)property.GetTypeMapping().ElementTypeMapping;
+        Check.DebugAssert(elementTypeMapping != null, $"Missing element type mapping for primitive collection '{property.DeclaringType.DisplayName()}.{property.Name}'.");
+
+        var scalarValueType = GetJsonValueType(elementTypeMapping!);
 
         return new RelationalJsonScalar(parentElement, property.IsNullable, scalarValueType);
     }
