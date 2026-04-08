@@ -764,6 +764,48 @@ GO
         }
 
         [ConditionalFact]
+        public void Throws_for_old_migration_version()
+        {
+            using var context = new BloggingContext(
+                Fixture.TestStore.AddProviderOptions(
+                    new DbContextOptionsBuilder().EnableServiceProviderCaching(false)
+                        .ConfigureWarnings(e => e.Throw(RelationalEventId.OldMigrationVersionWarning)
+                            .Ignore(RelationalEventId.PendingModelChangesWarning))).Options);
+
+            context.Database.EnsureDeleted();
+            GiveMeSomeTime(context);
+
+            Assert.Equal(
+                CoreStrings.WarningAsErrorTemplate(
+                    RelationalEventId.OldMigrationVersionWarning.ToString(),
+                    RelationalResources.LogOldMigrationVersion(new TestLogger<TestRelationalLoggingDefinitions>())
+                        .GenerateMessage(nameof(BloggingMigration2), "9.0.0"),
+                    "RelationalEventId.OldMigrationVersionWarning"),
+                (Assert.Throws<InvalidOperationException>(context.Database.Migrate)).Message);
+        }
+
+        [ConditionalFact]
+        public async Task Throws_for_old_migration_version_async()
+        {
+            using var context = new BloggingContext(
+                Fixture.TestStore.AddProviderOptions(
+                    new DbContextOptionsBuilder().EnableServiceProviderCaching(false)
+                        .ConfigureWarnings(e => e.Throw(RelationalEventId.OldMigrationVersionWarning)
+                            .Ignore(RelationalEventId.PendingModelChangesWarning))).Options);
+
+            await context.Database.EnsureDeletedAsync();
+            await GiveMeSomeTimeAsync(context);
+
+            Assert.Equal(
+                CoreStrings.WarningAsErrorTemplate(
+                    RelationalEventId.OldMigrationVersionWarning.ToString(),
+                    RelationalResources.LogOldMigrationVersion(new TestLogger<TestRelationalLoggingDefinitions>())
+                        .GenerateMessage(nameof(BloggingMigration2), "9.0.0"),
+                    "RelationalEventId.OldMigrationVersionWarning"),
+                (await Assert.ThrowsAsync<InvalidOperationException>(() => context.Database.MigrateAsync())).Message);
+        }
+
+        [ConditionalFact]
         public void Throws_for_nondeterministic_HasData()
         {
             using var context = new BloggingContext(

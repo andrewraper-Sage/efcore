@@ -3,6 +3,7 @@
 
 using System.Transactions;
 using Microsoft.EntityFrameworkCore.Diagnostics.Internal;
+using Microsoft.EntityFrameworkCore.Internal;
 using IsolationLevel = System.Data.IsolationLevel;
 
 namespace Microsoft.EntityFrameworkCore.Migrations.Internal;
@@ -376,22 +377,31 @@ public class Migrator : IMigrator
         {
             _logger.ModelSnapshotNotFound(this, _migrationsAssembly);
         }
-        else if (targetMigration == null
-                 && RelationalResources.LogPendingModelChanges(_logger).WarningBehavior != WarningBehavior.Ignore
-                 && HasPendingModelChanges())
+        else
         {
-            var modelSource = (ModelSource)_currentContext.Context.GetService<IModelSource>();
+            if (targetMigration == null
+                && RelationalResources.LogPendingModelChanges(_logger).WarningBehavior != WarningBehavior.Ignore
+                && HasPendingModelChanges())
+            {
+                var modelSource = (ModelSource)_currentContext.Context.GetService<IModelSource>();
 #pragma warning disable EF1001 // Internal EF Core API usage.
-            var newDesignTimeModel = modelSource.CreateModel(
-                _currentContext.Context, _currentContext.Context.GetService<ModelCreationDependencies>(), designTime: true);
+                var newDesignTimeModel = modelSource.CreateModel(
+                    _currentContext.Context, _currentContext.Context.GetService<ModelCreationDependencies>(), designTime: true);
 #pragma warning restore EF1001 // Internal EF Core API usage.
-            if (_migrationsModelDiffer.HasDifferences(newDesignTimeModel.GetRelationalModel(), _designTimeModel.Model.GetRelationalModel()))
-            {
-                _logger.NonDeterministicModel(_currentContext.Context.GetType());
+                if (_migrationsModelDiffer.HasDifferences(newDesignTimeModel.GetRelationalModel(), _designTimeModel.Model.GetRelationalModel()))
+                {
+                    _logger.NonDeterministicModel(_currentContext.Context.GetType());
+                }
+                else
+                {
+                    _logger.PendingModelChangesWarning(_currentContext.Context.GetType());
+                }
             }
-            else
+
+            var snapshotVersion = _migrationsAssembly.ModelSnapshot.Model.GetProductVersion();
+            if (new SemanticVersionComparer().Compare(snapshotVersion, ProductInfo.GetVersion()) < 0)
             {
-                _logger.PendingModelChangesWarning(_currentContext.Context.GetType());
+                _logger.OldMigrationVersionWarning(_migrationsAssembly.Migrations.Values.Last(), snapshotVersion);
             }
         }
 

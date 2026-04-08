@@ -3839,6 +3839,31 @@ namespace Microsoft.EntityFrameworkCore.Diagnostics.Internal
         }
 
         /// <summary>
+        ///     The last migration '{migrationName}' was created with EF Core version '{efVersion}'. The current version is newer. Consider adding a new empty migration to take advantage of any bug fixes and improvements in the current version of EF Core.
+        /// </summary>
+        public static EventDefinition<string, string> LogOldMigrationVersion(IDiagnosticsLogger logger)
+        {
+            var definition = ((RelationalLoggingDefinitions)logger.Definitions).LogOldMigrationVersion;
+            if (definition == null)
+            {
+                definition = NonCapturingLazyInitializer.EnsureInitialized(
+                    ref ((RelationalLoggingDefinitions)logger.Definitions).LogOldMigrationVersion,
+                    logger,
+                    static logger => new EventDefinition<string, string>(
+                        logger.Options,
+                        RelationalEventId.OldMigrationVersionWarning,
+                        LogLevel.Warning,
+                        "RelationalEventId.OldMigrationVersionWarning",
+                        level => LoggerMessage.Define<string, string>(
+                            level,
+                            RelationalEventId.OldMigrationVersionWarning,
+                            _resourceManager.GetString("LogOldMigrationVersion")!)));
+            }
+
+            return (EventDefinition<string, string>)definition;
+        }
+
+        /// <summary>
         ///     The model for context '{contextType}' changes each time it is built. This is usually caused by dynamic values used in a 'HasData' call (e.g. `new DateTime()`, `Guid.NewGuid()`). Add a new migration and examine its contents to locate the cause, and replace the dynamic call with a static, hardcoded value. See https://aka.ms/efcore-docs-pending-changes.
         /// </summary>
         public static EventDefinition<string> LogNonDeterministicModel(IDiagnosticsLogger logger)
