@@ -398,9 +398,11 @@ public class Migrator : IMigrator
             }
 
             var snapshotVersion = _migrationsAssembly.ModelSnapshot.Model.GetProductVersion();
-            var currentMajorVersion = new Version(ProductInfo.GetVersion().Split('-')[0]).Major;
+            var currentVersion = ProductInfo.GetVersion();
+            var currentMajorVersion = int.Parse(currentVersion[..currentVersion.IndexOf('.')]);
             if (snapshotVersion == null
-                || new Version(snapshotVersion.Split('-')[0]).Major < currentMajorVersion)
+                || !int.TryParse(snapshotVersion[..snapshotVersion.IndexOf('.')], out var snapshotMajorVersion)
+                || snapshotMajorVersion < currentMajorVersion)
             {
                 _logger.OldMigrationVersionWarning(_migrationsAssembly.Migrations.Values.Last(), snapshotVersion);
             }
