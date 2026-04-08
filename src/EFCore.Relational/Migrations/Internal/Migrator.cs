@@ -3,7 +3,6 @@
 
 using System.Transactions;
 using Microsoft.EntityFrameworkCore.Diagnostics.Internal;
-using Microsoft.EntityFrameworkCore.Internal;
 using IsolationLevel = System.Data.IsolationLevel;
 
 namespace Microsoft.EntityFrameworkCore.Migrations.Internal;
@@ -399,8 +398,9 @@ public class Migrator : IMigrator
             }
 
             var snapshotVersion = _migrationsAssembly.ModelSnapshot.Model.GetProductVersion();
+            var currentMajorVersion = new Version(ProductInfo.GetVersion().Split('-')[0]).Major;
             if (snapshotVersion == null
-                || new SemanticVersionComparer().Compare(snapshotVersion, ProductInfo.GetVersion()) < 0)
+                || new Version(snapshotVersion.Split('-')[0]).Major < currentMajorVersion)
             {
                 _logger.OldMigrationVersionWarning(_migrationsAssembly.Migrations.Values.Last(), snapshotVersion);
             }
