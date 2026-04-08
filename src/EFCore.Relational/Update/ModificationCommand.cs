@@ -770,8 +770,8 @@ public class ModificationCommand : IModificationCommand, INonTrackedModification
                 }
 
                 var element = jsonProperty.GetJsonElementMappings()
-                    .SingleOrDefault(jm => ReferenceEquals(jm.TableMapping.Table, jsonColumn.Table))
-                    ?.Element;
+                    .Single(jm => ReferenceEquals(jm.TableMapping.Table, jsonColumn.Table))
+                    .Element;
 
                 // When the final property maps to an array and we're updating a specific element
                 // (i.e., the last entry in updateInfo has an ordinal), use the array element type's
@@ -782,7 +782,7 @@ public class ModificationCommand : IModificationCommand, INonTrackedModification
                     element = jsonArray.ElementType;
                 }
 
-                var pathSegments = element?.Path ?? [];
+                var pathSegments = element.Path;
 
                 // Truncate ordinals to match the number of array segments in the path.
                 // FindCommonJsonPartialUpdateInfo may have reduced the update to a common ancestor
