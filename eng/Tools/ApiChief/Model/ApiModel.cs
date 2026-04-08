@@ -42,16 +42,16 @@ internal sealed class ApiModel
     }
 
     public static ApiModel LoadFromFile(string path)
-     => JsonSerializer.Deserialize<ApiModel>(File.ReadAllText(path), _serializerOptions)!;
+        => JsonSerializer.Deserialize<ApiModel>(File.ReadAllText(path), _serializerOptions)!;
 
     public void EvaluateDelta(ApiModel current)
-     => current.Types = FindChanges(this, current);
+        => current.Types = FindChanges(this, current);
 
     public bool HasRemovals()
         => Types.Any(static type => type.Removals != null);
 
     public override string ToString()
-     => JsonSerializer.Serialize(this, _serializerOptions).ReplaceLineEndings(Environment.NewLine);
+        => JsonSerializer.Serialize(this, _serializerOptions).ReplaceLineEndings(Environment.NewLine);
 
     private static ISet<ApiType> FindChanges(ApiModel baseline, ApiModel current)
     {
