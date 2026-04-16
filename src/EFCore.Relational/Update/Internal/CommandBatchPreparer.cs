@@ -726,31 +726,60 @@ public class CommandBatchPreparer : ICommandBatchPreparer
                             predecessorCommands.Add(command);
                         }
                     }
-                }
 
-                foreach (var entry in command.Entries)
-                {
-                    foreach (var foreignKey in entry.EntityType.GetForeignKeys())
+                    // Also handle FKs with no mapped constraints (e.g. TPC with abstract principal mapped to no table)
+                    foreach (var entry in command.Entries)
                     {
-                        if (!CanCreateDependency(foreignKey, command, principal: false)
-                            || !IsModified(foreignKey.Properties, entry)
-                            || foreignKey.GetMappedConstraints().Any(c => c.Table == command.Table))
+                        foreach (var foreignKey in entry.EntityType.GetForeignKeys())
                         {
-                            continue;
-                        }
-
-                        var dependentKeyValue = foreignKey.GetDependentKeyValueFactory()
-                            ?.CreateDependentEquatableKey(entry, fromOriginalValues: true);
-
-                        if (dependentKeyValue != null)
-                        {
-                            if (!originalPredecessorsMap.TryGetValue(dependentKeyValue, out var predecessorCommands))
+                            if (!CanCreateDependency(foreignKey, command, principal: false)
+                                || !IsModified(foreignKey.Properties, entry)
+                                || foreignKey.GetMappedConstraints().Any())
                             {
-                                predecessorCommands = [];
-                                originalPredecessorsMap.Add(dependentKeyValue, predecessorCommands);
+                                continue;
                             }
 
-                            predecessorCommands.Add(command);
+                            var dependentKeyValue = foreignKey.GetDependentKeyValueFactory()
+                                ?.CreateDependentEquatableKey(entry, fromOriginalValues: true);
+
+                            if (dependentKeyValue != null)
+                            {
+                                if (!originalPredecessorsMap.TryGetValue(dependentKeyValue, out var predecessorCommands))
+                                {
+                                    predecessorCommands = [];
+                                    originalPredecessorsMap.Add(dependentKeyValue, predecessorCommands);
+                                }
+
+                                predecessorCommands.Add(command);
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    foreach (var entry in command.Entries)
+                    {
+                        foreach (var foreignKey in entry.EntityType.GetForeignKeys())
+                        {
+                            if (!CanCreateDependency(foreignKey, command, principal: false)
+                                || !IsModified(foreignKey.Properties, entry))
+                            {
+                                continue;
+                            }
+
+                            var dependentKeyValue = foreignKey.GetDependentKeyValueFactory()
+                                ?.CreateDependentEquatableKey(entry, fromOriginalValues: true);
+
+                            if (dependentKeyValue != null)
+                            {
+                                if (!originalPredecessorsMap.TryGetValue(dependentKeyValue, out var predecessorCommands))
+                                {
+                                    predecessorCommands = [];
+                                    originalPredecessorsMap.Add(dependentKeyValue, predecessorCommands);
+                                }
+
+                                predecessorCommands.Add(command);
+                            }
                         }
                     }
                 }
@@ -824,25 +853,47 @@ public class CommandBatchPreparer : ICommandBatchPreparer
                         AddMatchingPredecessorEdge(
                             originalPredecessorsMap, principalKeyValue, command, foreignKey);
                     }
-                }
 
-                // ReSharper disable once ForCanBeConvertedToForeach
-                for (var entryIndex = 0; entryIndex < command.Entries.Count; entryIndex++)
-                {
-                    var entry = command.Entries[entryIndex];
-                    foreach (var foreignKey in entry.EntityType.GetReferencingForeignKeys())
+                    // Also handle FKs with no mapped constraints (e.g. TPC with abstract principal mapped to no table)
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    for (var entryIndex = 0; entryIndex < command.Entries.Count; entryIndex++)
                     {
-                        if (!CanCreateDependency(foreignKey, command, principal: true)
-                            || foreignKey.GetMappedConstraints().Any(c => c.PrincipalTable == command.Table))
+                        var entry = command.Entries[entryIndex];
+                        foreach (var foreignKey in entry.EntityType.GetReferencingForeignKeys())
                         {
-                            continue;
-                        }
+                            if (!CanCreateDependency(foreignKey, command, principal: true)
+                                || foreignKey.GetMappedConstraints().Any())
+                            {
+                                continue;
+                            }
 
-                        var principalKeyValue = foreignKey.GetDependentKeyValueFactory()
-                            .CreatePrincipalEquatableKey(entry, fromOriginalValues: true);
-                        Check.DebugAssert(principalKeyValue != null, "null principalKeyValue");
-                        AddMatchingPredecessorEdge(
-                            originalPredecessorsMap, principalKeyValue, command, foreignKey);
+                            var principalKeyValue = foreignKey.GetDependentKeyValueFactory()
+                                .CreatePrincipalEquatableKey(entry, fromOriginalValues: true);
+                            Check.DebugAssert(principalKeyValue != null, "null principalKeyValue");
+                            AddMatchingPredecessorEdge(
+                                originalPredecessorsMap, principalKeyValue, command, foreignKey);
+                        }
+                    }
+                }
+                else
+                {
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    for (var entryIndex = 0; entryIndex < command.Entries.Count; entryIndex++)
+                    {
+                        var entry = command.Entries[entryIndex];
+                        foreach (var foreignKey in entry.EntityType.GetReferencingForeignKeys())
+                        {
+                            if (!CanCreateDependency(foreignKey, command, principal: true))
+                            {
+                                continue;
+                            }
+
+                            var principalKeyValue = foreignKey.GetDependentKeyValueFactory()
+                                .CreatePrincipalEquatableKey(entry, fromOriginalValues: true);
+                            Check.DebugAssert(principalKeyValue != null, "null principalKeyValue");
+                            AddMatchingPredecessorEdge(
+                                originalPredecessorsMap, principalKeyValue, command, foreignKey);
+                        }
                     }
                 }
             }
